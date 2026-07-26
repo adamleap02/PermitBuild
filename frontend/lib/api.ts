@@ -24,6 +24,7 @@
  * ...so the UI is always demonstrable, whether or not the backend is up.
  */
 import {
+  allPermitsMock,
   getPermitMock,
   getPropertyMock,
   listJurisdictionsMock,
@@ -34,6 +35,7 @@ import type {
   JurisdictionOut,
   PermitDetail,
   PermitListResponse,
+  PermitMapResponse,
   PermitSearchParams,
   PropertyOut,
   SavedSearch,
@@ -100,6 +102,33 @@ export async function searchPermits(params: PermitSearchParams): Promise<PermitL
   } catch (err) {
     warnFallback("GET /permits", err);
     return searchPermitsMock(params);
+  }
+}
+
+/**
+ * High-volume, lightweight endpoint for the map view. Unlike `searchPermits`
+ * (paginated at up to 200/page for the results table), this returns up to
+ * `limit` geocoded points matching the same filters -- with 500K+ real
+ * permits now ingested, the map needs far more than one page's worth of
+ * pins to actually reflect the dataset's scale. MapLibre clusters
+ * client-side, so a few thousand points render fine.
+ */
+export async function mapPermits(
+  params: PermitSearchParams,
+  limit = 5000
+): Promise<PermitMapResponse> {
+  if (FORCE_MOCKS) {
+    const items = allPermitsMock();
+    return { total_matching: items.length, total_geocoded: items.length, returned: items.length, items };
+  }
+  try {
+    const { page: _page, page_size: _page_size, ...filters } = params;
+    const qs = buildQuery({ ...filters, limit } as Record<string, unknown>);
+    return await request<PermitMapResponse>(`/permits/map?${qs}`);
+  } catch (err) {
+    warnFallback("GET /permits/map", err);
+    const items = allPermitsMock();
+    return { total_matching: items.length, total_geocoded: items.length, returned: items.length, items };
   }
 }
 

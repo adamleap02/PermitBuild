@@ -83,6 +83,13 @@ class PermitListResponse(BaseModel):
     items: list[PermitListItem]
 
 
+class PermitMapResponse(BaseModel):
+    total_matching: int
+    total_geocoded: int
+    returned: int
+    items: list[PermitListItem]
+
+
 class OwnerOut(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 

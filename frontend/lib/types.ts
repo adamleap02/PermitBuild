@@ -74,6 +74,13 @@ export interface PermitListResponse {
   items: PermitListItem[];
 }
 
+export interface PermitMapResponse {
+  total_matching: number;
+  total_geocoded: number;
+  returned: number;
+  items: PermitListItem[];
+}
+
 export interface OwnerOut {
   id: number;
   name: string | null;

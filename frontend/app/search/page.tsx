@@ -6,7 +6,7 @@ import { Bell, Download, Save } from "lucide-react";
 
 import type { PermitSearchParams } from "@/lib/types";
 import { buildExportUrl } from "@/lib/api";
-import { usePermitsSearch } from "@/lib/hooks/use-permits";
+import { usePermitsMap, usePermitsSearch } from "@/lib/hooks/use-permits";
 import { useCreateSavedSearch } from "@/lib/hooks/use-saved-searches";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -62,6 +62,11 @@ function SearchPageInner() {
 
   const { data, isLoading, isFetching, isError, error } = usePermitsSearch(filters);
   const createSavedSearch = useCreateSavedSearch();
+
+  // The map view needs far more points than one table page (25-200) to
+  // reflect the dataset's real scale (500K+ permits) -- only fetched while
+  // the map tab is actually active, since it's a much heavier request.
+  const mapQuery = usePermitsMap(filters, 5000, view === "map");
 
   const items = data?.items ?? [];
   const total = data?.total ?? 0;
@@ -168,7 +173,18 @@ function SearchPageInner() {
               <Pagination page={page} pageSize={pageSize} total={total} onPageChange={handlePageChange} />
             </>
           ) : (
-            <ResultsMap items={items} />
+            <>
+              {mapQuery.data && (
+                <div className="border-b border-border px-4 py-2 text-xs text-muted-foreground">
+                  Showing {mapQuery.data.returned.toLocaleString()} of{" "}
+                  {mapQuery.data.total_geocoded.toLocaleString()} geocoded permits
+                  {mapQuery.data.total_matching !== mapQuery.data.total_geocoded && (
+                    <> ({mapQuery.data.total_matching.toLocaleString()} total match your filters)</>
+                  )}
+                </div>
+              )}
+              <ResultsMap items={mapQuery.data?.items ?? []} />
+            </>
           )}
         </Card>
       </div>

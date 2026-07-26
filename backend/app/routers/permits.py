@@ -9,7 +9,13 @@ from sqlalchemy.orm import Session
 
 from app.db import get_db
 from app.models import Permit, PermitVersion, Score
-from app.schemas import PermitDetail, PermitListResponse, PermitVersionOut, ScoreOut
+from app.schemas import (
+    PermitDetail,
+    PermitListResponse,
+    PermitMapResponse,
+    PermitVersionOut,
+    ScoreOut,
+)
 
 router = APIRouter(prefix="/permits", tags=["permits"])
 
@@ -90,6 +96,59 @@ def search_permits(
         .all()
     )
     return PermitListResponse(total=total, page=page, page_size=page_size, items=items)
+
+
+@router.get("/map", response_model=PermitMapResponse)
+def map_permits(
+    jurisdiction_id: Optional[int] = None,
+    permit_type: Optional[str] = None,
+    status: Optional[str] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    min_value: Optional[float] = None,
+    max_value: Optional[float] = None,
+    keyword: Optional[str] = None,
+    limit: int = Query(
+        default=600000,
+        ge=1,
+        le=1000000,
+        description="Max geocoded points to return for map rendering. Defaults high enough to cover every geocoded permit in the dataset; client-side supercluster clustering is designed for this scale.",
+    ),
+    db: Session = Depends(get_db),
+):
+    """Lightweight, high-volume endpoint for the map view -- unlike the
+    paginated /permits list (capped at 200/page for tables), this returns
+    up to `limit` geocoded points matching the same filters so the map can
+    reflect the real scale of the dataset. Clustering happens client-side
+    (MapLibre supercluster), so a few thousand points render fine."""
+    query = db.query(Permit)
+    query = apply_filters(
+        query,
+        jurisdiction_id=jurisdiction_id,
+        permit_type=permit_type,
+        status=status,
+        date_from=date_from,
+        date_to=date_to,
+        min_value=min_value,
+        max_value=max_value,
+        keyword=keyword,
+    )
+    total_matching = query.count()
+
+    geocoded_query = query.filter(Permit.latitude.isnot(None), Permit.longitude.isnot(None))
+    total_geocoded = geocoded_query.count()
+
+    items = (
+        geocoded_query.order_by(nullslast(Permit.issue_date.desc()), Permit.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return PermitMapResponse(
+        total_matching=total_matching,
+        total_geocoded=total_geocoded,
+        returned=len(items),
+        items=items,
+    )
 
 
 @router.get("/{permit_id}", response_model=PermitDetail)

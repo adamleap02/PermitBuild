@@ -87,6 +87,27 @@ def test_permit_search_and_filters(client, db_session):
     assert body["items"][0]["permit_number"] == "A-100"
 
 
+def test_permit_map_returns_geocoded_points_with_counts(client, db_session):
+    j = _make_jurisdiction(db_session, name="MapTown", state="TX")
+    _make_permit(db_session, j, permit_number="M-1", latitude=30.1, longitude=-97.1)
+    _make_permit(db_session, j, permit_number="M-2", latitude=30.2, longitude=-97.2)
+    _make_permit(db_session, j, permit_number="M-3", latitude=None, longitude=None)  # ungeocoded
+
+    resp = client.get("/permits/map", params={"jurisdiction_id": j.id})
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["total_matching"] == 3
+    assert body["total_geocoded"] == 2
+    assert body["returned"] == 2
+    assert len(body["items"]) == 2
+    assert all(item["latitude"] is not None for item in body["items"])
+
+    resp = client.get("/permits/map", params={"jurisdiction_id": j.id, "limit": 1})
+    body = resp.json()
+    assert body["returned"] == 1
+    assert body["total_geocoded"] == 2  # count reflects all matches, not just the capped page
+
+
 def test_permit_detail_includes_versions_and_score(client, db_session):
     j = _make_jurisdiction(db_session, name="DetailTown", state="NY")
     permit = _make_permit(db_session, j, permit_number="D-1")

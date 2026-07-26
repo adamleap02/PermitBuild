@@ -16,5 +16,5 @@ set BACKEND_DIR=C:\Users\schar\construction-intel\backend
 cd /d "%BACKEND_DIR%"
 if not exist "%BACKEND_DIR%\logs" mkdir "%BACKEND_DIR%\logs"
 echo ===== Daily ingest run: %DATE% %TIME% ===== >> "%BACKEND_DIR%\logs\daily_ingest.log"
-"%BACKEND_DIR%\venv\Scripts\python.exe" "%BACKEND_DIR%\scripts\run_ingest.py" --all --since-days 60 >> "%BACKEND_DIR%\logs\daily_ingest.log" 2>&1
+"%BACKEND_DIR%\venv\Scripts\python.exe" "%BACKEND_DIR%\scripts\run_ingest.py" --all --since-days 60 --limit 0 >> "%BACKEND_DIR%\logs\daily_ingest.log" 2>&1
 echo ===== exit code %ERRORLEVEL% ===== >> "%BACKEND_DIR%\logs\daily_ingest.log"

@@ -84,3 +84,6 @@ Desktop.ini
 *.log
 *.pid
 .cache/
+
+# Downloaded binaries -- not source, don't belong in git history
+tools/cloudflared.exe

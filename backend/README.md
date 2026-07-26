@@ -291,7 +291,8 @@ projects. Like the FOIA poll (and for the same reason -- no Celery/Redis
 broker here, and it must run independently of any Claude session), this is
 a Windows Task Scheduler job running `scripts\run_daily_ingest.cmd` (a
 wrapper that `cd`s into `backend`, runs
-`run_ingest.py --all --since-days 60`, and appends to
+`run_ingest.py --all --since-days 60 --limit 0` -- every record in the
+rolling window, not a sample -- and appends to
 `backend\logs\daily_ingest.log`). It uses a rolling 60-day incremental
 window so the daily run stays bounded and polite to the free public APIs
 (Socrata/ArcGIS filter server-side on their date field; other sources
@@ -561,21 +562,40 @@ call is unaffected either way.
 
 ## Current live dataset snapshot
 
-As of the last full `--all` run: **62 jurisdictions**, **~5,930 real
-permits**, **~2,780 properties**, **~482 owners**, spanning **34 US
-states/territories** (added **SC** this pass, via Charleston). Re-run
-`scripts/run_ingest.py --all --limit 60` at any time to refresh/grow
-this -- it's fully idempotent (the ArcGIS timezone-diff idempotency bug
-that used to inflate version history on every re-run was fixed in a prior
-pass -- see `BLOCKERS.md` §5g). The per-jurisdiction record counts in
-the demo DB are capped by `--limit`; the underlying sources are far
-larger (Fort Worth alone exposes 756k+ live records; Orlando 1.1M+,
-Boston 657k+, Prince George's County 461k+).
+**Scaled up to genuine production volume** (see `BLOCKERS.md` §5j):
+**62 jurisdictions**, **538,981 real permits**, **266,733 properties**,
+**141,055 owners**, **542,080 permit-version rows**, spanning **34 US
+states/territories** (AZ, CA, CO, CT, DC, FL, GA, HI, ID, IL, IN, KY, LA,
+MA, MD, MI, MN, MO, MT, NC, NJ, NM, NV, NY, OH, OR, PA, SC, SD, TN, TX,
+VA, WA). ~64% of permits carry lat/lon directly from the source.
 
-Note: a full `--all` run may report a couple of jurisdictions with a
-handful of `permit_versions` UNIQUE-constraint errors (or, for two, a
-whole-jurisdiction `FAILED`) -- this is the pre-existing version-numbering
-edge documented in `BLOCKERS.md` §5i, affecting a few older jurisdictions
-(SF, Cincinnati, Howard, Marin, Minneapolis, Nashville, Fort Worth), not
-the sources added this pass (which ingest cleanly, Errors=0). No data is
-corrupted -- affected jurisdictions retain their prior-run data.
+Highest-volume jurisdictions this pass: **Orlando 150,000**, **Fort Worth
+120,029**, **Columbus 50,000**, with every other jurisdiction pulled to
+~5,000 real records for breadth (older sources were previously a ~60-row
+`--limit` sample). The underlying feeds are far larger still (Orlando
+1.1M+, Fort Worth 756k+, Columbus 675k+, Boston 657k+, Prince George's
+461k+, Las Vegas 435k+) -- see the "Scaling up" section above for how to
+pull more (`--limit 0` per source, or `scripts/scale_ingest.py`).
+
+The whole DB is fully idempotent: re-running any source reports the
+already-present rows as `Unchanged` (verified -- e.g. re-running SF is
+`Created=0 Updated=0 Unchanged=2000 Errors=0`). The
+`permit_versions` version-numbering race that used to fail SF/Cincinnati
+whole-jurisdiction and error per-record on Marin/Howard/Minneapolis/
+Nashville/Fort Worth is **fixed** (`BLOCKERS.md` §5i): the full 62-source
+scale run above produced **zero** `IntegrityError`s and **zero**
+jurisdiction-level failures, and the DB has **0** duplicate
+`(permit_id, version_number)` rows across all 542k versions. (A handful of
+benign per-record `Errors=` can still appear where a source publishes a row
+with no permit number at all, e.g. Cook County -- these are skipped, not
+fatal.)
+
+**Note on SQLite at this scale:** on the create path (insert permit +
+dedup/insert property + insert owner + version) SQLite sustains only
+~85-130 rows/sec here, so pulling literally every historical record from
+the 1M-row feeds would take many hours. Periodic per-batch commits
+(`app/ingest.py`) keep throughput flat, and secondary indexes were added
+on `permits(issue_date, latitude, longitude, property_id)` (migration
+`a7b9c1d2e3f4`), but this write-throughput ceiling is a concrete reason to
+prioritize the **Postgres/PostGIS migration** already scaffolded in
+`infra/docker-compose.yml` -- see `BLOCKERS.md` §1 and §5j.

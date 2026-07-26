@@ -347,8 +347,19 @@ def run_ingest(
     limit: Optional[int] = None,
     geocode_missing: bool = True,
     enrich: bool = True,
+    commit_every: int = 2000,
 ) -> IngestStats:
-    """Run a jurisdiction's connector end-to-end and upsert all results."""
+    """Run a jurisdiction's connector end-to-end and upsert all results.
+
+    ``commit_every`` bounds the size of each DB transaction. Committing only
+    once at the very end works for small pulls but is pathological at
+    production scale: a single uncommitted 150K-row transaction makes the
+    SQLite WAL grow without bound (WAL frames for an *open* transaction
+    can't be checkpointed until it commits), so every insert/query slows to
+    a crawl as the run progresses. Periodic commits keep the WAL small and
+    throughput flat, and also mean a mid-run interruption keeps everything
+    committed so far instead of losing the whole jurisdiction.
+    """
     connector = build_connector(jurisdiction)
     geocoder = CensusGeocoder() if geocode_missing else None
 
@@ -357,6 +368,7 @@ def run_ingest(
     # through every upsert so duplicate permit_numbers within this batch
     # get monotonic version numbers instead of colliding (see upsert_permit).
     version_numbers: dict[int, int] = {}
+    since_last_commit = 0
     for normalized in connector.fetch_permits(since=since, limit=limit):
         stats.fetched += 1
         try:
@@ -371,6 +383,10 @@ def run_ingest(
                 stats.touched_permit_ids.append(permit_id)
             else:
                 stats.unchanged += 1
+            since_last_commit += 1
+            if commit_every and since_last_commit >= commit_every:
+                db.commit()
+                since_last_commit = 0
         except Exception:
             # Critical: a DB-level error (e.g. an IntegrityError from a
             # flush) leaves the SQLAlchemy session in a "pending rollback"
@@ -379,9 +395,12 @@ def run_ingest(
             # silently poisons and fails every remaining record in the
             # batch (found live against Cook County's permit feed, where
             # `permit_number` is occasionally reused across genuinely
-            # distinct records -- see BLOCKERS.md).
+            # distinct records -- see BLOCKERS.md). With periodic commits a
+            # rollback only discards the current uncommitted chunk, not the
+            # whole jurisdiction.
             logger.exception("Failed to upsert permit %s", normalized.get("permit_number"))
             db.rollback()
+            since_last_commit = 0
             stats.errors += 1
 
     db.commit()

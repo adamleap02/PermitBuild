@@ -818,6 +818,87 @@ the DB under the old un-suffixed numbers (non-destructive -- old data is
 never overwritten); they simply stop receiving new versions and are
 superseded by the newly-keyed rows on the next ingest.
 
+### 5j. Seventh pass -- production-scale volume + daily "evergreen" scheduler
+
+Scaled the DB from the ~5,930-row dev sample to genuine production volume,
+made ingestion self-refreshing, and hardened the connectors/DB for scale.
+
+**Connector pagination for volume** (`app/connectors/*.py`): Socrata now
+pulls up to **50,000** rows/request (`$limit`), CKAN **10,000**/request,
+and ArcGIS pages on `resultOffset` and terminates on the server's own
+`exceededTransferLimit` flag (so it walks a whole layer even when the
+FeatureServer truncates a big requested page to its `maxRecordCount`). All
+three back off with exponential delay + `Retry-After` on HTTP 429/5xx so a
+big multi-page pull stays polite to the free public services.
+
+**Ingest throughput fix** (`app/ingest.py`): `run_ingest` now commits every
+`commit_every=2000` records instead of once per jurisdiction. A single
+uncommitted 150K-row transaction made the SQLite WAL grow without bound
+(WAL frames for an *open* transaction can't be checkpointed until commit),
+so throughput collapsed as a run progressed -- an early 150K Orlando pull
+crawled and hadn't finished in 13 min. With periodic commits throughput is
+flat and a mid-run stop keeps everything committed so far.
+
+**Indexes** (migration `a7b9c1d2e3f4`): added secondary indexes on
+`permits(issue_date, latitude, longitude, property_id)`. The hot
+ingest-upsert lookup `(jurisdiction_id, permit_number)` and the
+version-history lookup `(permit_id, version_number)` were already covered
+by their UNIQUE indexes.
+
+**Final volume achieved (live DB query):** **62 jurisdictions, 538,981
+permits, 266,733 properties, 141,055 owners, 542,080 permit-version rows,
+34 states/territories.** Top sources: Orlando 150,000, Fort Worth 120,029,
+Columbus 50,000; every other jurisdiction pulled to ~5,000 for breadth.
+The full 62-source run produced **zero** version-numbering `IntegrityError`s
+and **zero** jurisdiction-level failures (the whole point of the §5i fix),
+and the DB has **0** duplicate `(permit_id, version_number)` rows.
+
+**Judgment call -- did NOT pull every historical record.** The largest
+feeds expose 400K-1.1M rows each (Orlando 1.1M, Fort Worth 756K, Columbus
+675K, Boston 657K, Prince George's 461K, Las Vegas 435K). Pulling all of
+them would take **many hours** because SQLite sustains only **~85-130
+rows/sec on the create path** here (insert permit + dedup/insert property +
+insert owner + insert version -- several indexed writes + flushes per
+record). So the priority sources were pulled to a large but bounded chunk
+(Orlando 150K, Fort Worth 120K over ~29 min for that ArcGIS layer alone),
+then the run was deliberately stopped and a bounded `--all --limit 5000`
+top-up brought **all 62 jurisdictions** to real volume for breadth rather
+than spending ~3 more hours deepening 4 more single sources. Half a million
+real permits across 62 jurisdictions and 34 states is genuine
+production-scale; pulling the full tens-of-millions of available rows is a
+`--limit 0` / `scripts/scale_ingest.py` run away whenever wanted.
+
+**This SQLite write-throughput ceiling is the concrete trigger to
+prioritize the Postgres/PostGIS migration** already scaffolded in
+`infra/docker-compose.yml` (see §1): Postgres handles concurrent bulk
+`COPY`/insert far better, and PostGIS would replace the naive lat/lon
+bounding-box path with real spatial indexes -- both increasingly relevant
+now that the DB is ~half a million permits and 267K geocoded properties.
+
+**Daily "evergreen" scheduler (NEW indefinite background task).** Per the
+product spec's "run once per day" requirement, a real Windows Task
+Scheduler job **`ConstructionIntel-Daily-Ingest`** was registered (distinct
+from the existing `ConstructionIntel-FOIA-Poll`). It runs
+`scripts\run_daily_ingest.cmd` daily at 02:30 -->
+`run_ingest.py --all --since-days 60` (a rolling 60-day incremental window
+so the daily run is bounded and polite: Socrata/ArcGIS filter server-side
+on their date field; CKAN / no-date-field sources re-scan and rely on
+idempotent upserts). It discovers new permits, detects modified permits
+(writing a new immutable `PermitVersion`), and never overwrites data.
+Registered/verified with:
+
+```powershell
+schtasks /create /tn "ConstructionIntel-Daily-Ingest" ^
+  /tr "C:\Users\schar\construction-intel\backend\scripts\run_daily_ingest.cmd" ^
+  /sc DAILY /st 02:30 /f
+schtasks /query  /tn "ConstructionIntel-Daily-Ingest" /v /fo LIST   # Status: Ready, Next Run 02:30
+schtasks /delete /tn "ConstructionIntel-Daily-Ingest" /f            # to remove it
+```
+
+Like the FOIA task, this is a genuine indefinite background job on this
+machine -- flagged here for transparency. Remove it with the `/delete`
+above if unwanted.
+
 ## 6. Property/parcel enrichment -- free sources wired up; commercial
 providers still not integrated (by design)
 

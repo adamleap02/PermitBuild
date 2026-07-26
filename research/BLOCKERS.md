@@ -1,0 +1,44 @@
+# Research Blockers & Follow-Ups Requiring Human Action
+
+This document lists everything in the research pass that could **not** be fully resolved for free, without an account/contract, or without a paid subscription — plus a clear "next action" for a human on the team.
+
+---
+
+## 1. Data access / vendor blockers
+
+| Item | Why it's blocked | Next action for a human |
+|---|---|---|
+| **Accela API access** | Accela's Construct/Automation API is licensed per-agency; documentation is public but provisioning a working key requires the *agency* (not just Accela) to grant access, typically via a formal data-sharing or vendor agreement. Could not test or confirm actual API behavior (auth flow specifics, real rate limits) without an account. | Pick 2–3 target cities on Accela, contact their IT/permitting department (or Accela directly) to ask about a data-sharing agreement or public records API access. Budget for possible delay (government approval cycles run weeks-to-months). |
+| **Tyler EnerGov / MyGov formal API** | No confirmed general-purpose open API for third parties; only the anonymous public lookup UI was verified. Could not confirm rate limits or ToS restrictions on scraping without triggering an account/agreement. | Have engineering do a small proof-of-concept scrape against 2–3 known EnerGov CSS instances (e.g., Cape Coral FL) and manually review the site's terms of use before scaling. |
+| **CentralSquare/Superion TRAKiT, Infor Public Sector, Selectron, GOGov, CityView, Cloudpermit, GovPilot** | No public API confirmed for any of these; assessment relied on marketing pages and third-party review sites (Capterra/G2), not hands-on testing. | Lower priority — defer detailed technical assessment to Phase 3 planning, when specific customer-driven jurisdiction requests make one of these vendors relevant. |
+| **Exact vendor market-share / city-count numbers** (e.g., "Accela covers 60% of US population") | These are self-reported vendor marketing claims; no independent, audited source was found. | Do not repeat these numbers in investor materials as fact — cite as "vendor claim" or commission a proper jurisdiction-by-jurisdiction audit (see Phase 1 recommendation in the main report). |
+| **CoreLogic, Experian, Acxiom, LiveRamp pricing** | All are enterprise/contact-sales products with no public pricing; figures cited in the report are third-party-reported data points (e.g., PriceLevel, Datarade) from other buyers, not confirmed quotes. | Before budgeting, someone needs to actually request quotes from CoreLogic, Experian, and (if relevant) Acxiom/LiveRamp sales teams. Expect these to require signing an NDA and possibly a minimum annual commitment in the tens-to-hundreds of thousands of dollars. |
+| **ATTOM, Regrid, BatchData, PropertyRadar, Datafiniti self-serve tiers** | Pricing pages exist and were reviewed, but actual signup (even for free trials) was intentionally NOT performed per task instructions (no signups, no accounts). | A human should sign up for the free trial/lowest paid tier of Regrid and/or Datafiniti (both have genuine low-cost or free entry points) to validate real API response shape, data quality, and match rates against a sample of scraped permit addresses before committing to a bigger contract. |
+| **Melissa's "1,000 free credits"** | Requires account creation to access; not tested. | Low-risk, low-cost — worth having someone create a free account and test property-append quality on a small sample. |
+| **USPS free API real-world rate limit (60 req/hour reported)** | Could not verify hands-on since it requires a USPS Web Tools / API account registration. | Register a free USPS API account early (no cost) and confirm actual throughput; if Phase 1 volume exceeds it, budget for a CASS-certified vendor (Smarty, PostGrid, or Melissa) at ~$0.01–$0.05/address. |
+
+## 2. Legal/compliance items requiring paid counsel or formal filings
+
+| Item | Why it's a blocker | Next action for a human |
+|---|---------|---|
+| **Data broker registration (CA, VT, TX, OR)** | This is a real legal filing with fees (~$6,000/yr CA + ~$200/yr VT + Texas + $600/yr OR ≈ **$7,000–8,000/yr combined**), not something researchable to full certainty without engaging a privacy attorney to confirm this company's specific activities trigger "data broker" status in each state. | Engage a privacy/data-broker attorney (or a compliance vendor like the ones referenced in the report — DataGrail, Clym, etc.) to make a formal determination before any commercial sale of owner-contact data. Do this well before launch — CA registration only opens Jan 1–31 each year, so missing the window means waiting a full year. |
+| **FCRA applicability determination** | Whether a specific customer use case (e.g., a lender wanting to pre-qualify homeowners) crosses into "consumer report" territory is fact-specific and legally nuanced — this report gives general guidance, not a legal opinion. | Before selling to any lender/insurer customer who might use the data for underwriting/eligibility decisions, get a formal FCRA opinion from counsel. This is not a DIY-researchable question with full confidence. |
+| **TCPA consent workflow design** | Designing a legally defensible consent-capture flow (for any future outbound calling/texting feature) requires legal review of the actual UI/consent language, not just general best practices. | Have counsel review the specific consent capture mechanism before launching any outbound SMS/call feature; consider avoiding centralized outbound contact entirely in v1 (let customer's own sales reps do outreach) to sidestep this risk initially. |
+| **State privacy law obligations at scale** | With 19+ states and rising, full multi-state compliance mapping (data subject request handling, opt-out mechanisms, sensitive-data consent flows) is a substantial ongoing legal exercise, not a one-time research task. | Budget for either ongoing outside counsel or a privacy-compliance SaaS tool (OneTrust, DataGrail, Clym, etc.) once the company handles meaningful volumes of consumer personal information. |
+| **Vendor contract resale/permissible-use restrictions** | Actual contract language from ATTOM, CoreLogic, Experian, etc. was not reviewed (no contracts obtained) — the report's characterization of licensing restrictions is based on general industry patterns and public vendor statements, not actual signed agreements. | Any data-licensing contract must be reviewed by counsel before signing, specifically checking resale/redistribution and permissible-use clauses against this company's actual business model (reselling enriched leads to third parties is a common trigger for tighter restrictions). |
+
+## 3. Sites/data that blocked direct fetching
+
+- Several vendor documentation pages (e.g., Accela's `developer.accela.com`, some ArcGIS REST service endpoints) were characterized via search-result snippets and third-party summaries rather than a direct successful fetch of the full page — where this occurred, findings should be treated as **directionally accurate but not verbatim-verified**. A follow-up pass with direct WebFetch (or manual browsing) against `developer.accela.com/docs`, `dev.socrata.com/docs/endpoints.html`, and specific ArcGIS REST service JSON endpoints would firm up exact request/response formats before engineering starts building connectors.
+- No jurisdiction-by-jurisdiction inventory was actually built (i.e., no one has enumerated all ~20,100 Census BPS-listed places and tagged each with its actual current vendor/access-type) — the report's coverage percentages are **estimates extrapolated from a sample**, not a completed census. Building that real inventory is itself recommended as a Phase 1 deliverable in the main report (§5.3).
+
+---
+
+## Top-line summary for whoever reads this first
+
+The single biggest real blocker is **money/contracts, not information** — the vendor landscape, legal framework, and rough coverage math are all researchable for free and are covered in the main report. The things that genuinely require a human to act (not just read) are:
+1. **Data broker registration in CA/VT/TX/OR** (~$7–8K/yr, has an annual filing window — start early).
+2. **Formal legal opinions on FCRA and TCPA applicability** before selling to lenders/insurers or doing outbound contact — this is not fully resolvable by research alone.
+3. **Actual quotes from CoreLogic/Experian/Acxiom/LiveRamp** (enterprise contact-sales only, no public pricing) if those are ever needed.
+4. **Hands-on API access from individual government agencies** (especially Accela-hosted cities) which requires direct outreach and can take weeks to months.
+5. **A real jurisdiction-by-jurisdiction inventory** — the coverage percentages in this report are informed estimates, not an audited count, and should be treated as a planning input rather than a number to publish externally.

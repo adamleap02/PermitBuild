@@ -1,0 +1,91 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 0 0% 100%;
+    --foreground: 0 0% 4%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 4%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 4%;
+
+    --primary: 213 68% 49%;
+    --primary-foreground: 0 0% 100%;
+
+    --secondary: 40 10% 95%;
+    --secondary-foreground: 0 0% 9%;
+
+    --muted: 40 10% 95%;
+    --muted-foreground: 40 5% 45%;
+
+    --accent: 40 10% 93%;
+    --accent-foreground: 0 0% 9%;
+
+    --destructive: 1 71% 57%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 40 12% 88%;
+    --input: 40 12% 88%;
+    --ring: 213 68% 49%;
+
+    --radius: 0.5rem;
+  }
+
+  .dark {
+    --background: 0 0% 7%;
+    --foreground: 0 0% 100%;
+
+    --card: 60 1% 10%;
+    --card-foreground: 0 0% 100%;
+
+    --popover: 60 1% 10%;
+    --popover-foreground: 0 0% 100%;
+
+    --primary: 214 74% 59%;
+    --primary-foreground: 0 0% 7%;
+
+    --secondary: 60 2% 16%;
+    --secondary-foreground: 0 0% 100%;
+
+    --muted: 60 2% 16%;
+    --muted-foreground: 45 6% 76%;
+
+    --accent: 60 2% 18%;
+    --accent-foreground: 0 0% 100%;
+
+    --destructive: 1 71% 65%;
+    --destructive-foreground: 0 0% 7%;
+
+    --border: 60 2% 20%;
+    --input: 60 2% 20%;
+    --ring: 214 74% 59%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* MapLibre popups should inherit the app's light/dark surface + ink tokens
+   instead of MapLibre's default white-only popup chrome. */
+.maplibregl-popup-content {
+  @apply rounded-md border border-border bg-popover text-popover-foreground shadow-md;
+  padding: 0.75rem;
+}
+.maplibregl-popup-tip {
+  border-top-color: hsl(var(--popover)) !important;
+  border-bottom-color: hsl(var(--popover)) !important;
+}
+.maplibregl-ctrl-attrib,
+.maplibregl-ctrl-attrib a {
+  color: #333;
+}

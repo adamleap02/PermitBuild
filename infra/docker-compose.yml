@@ -1,0 +1,72 @@
+# infra/docker-compose.yml
+#
+# Local development stack for construction-intel: Postgres+PostGIS and Redis.
+#
+# DEPENDENCY / STATUS NOTE:
+#   Docker is NOT currently installed on this dev machine (see infra/BLOCKERS.md).
+#   This file is written to be correct and ready to use the moment Docker Desktop
+#   (or Docker Engine + Compose plugin) is installed - it has not been run or
+#   verified here.
+#
+#   Until Docker is available, the backend is expected to default to a local
+#   SQLite file (see backend .env / DATABASE_URL default, e.g.
+#   "sqlite:///./construction_intel.db") so that local development is NOT blocked
+#   on this stack. Celery/Redis-dependent background-job features simply won't
+#   run until this compose stack (or real infra) is up - that's expected.
+#
+# Usage once Docker is installed:
+#   cp infra/.env.example infra/.env
+#   docker compose -f infra/docker-compose.yml --env-file infra/.env up -d
+#   docker compose -f infra/docker-compose.yml ps
+#
+# Then point the backend at Postgres/Redis instead of SQLite by setting in
+# backend/.env:
+#   DATABASE_URL=postgresql+psycopg://<POSTGRES_USER>:<POSTGRES_PASSWORD>@localhost:<POSTGRES_PORT>/<POSTGRES_DB>
+#   REDIS_URL=redis://localhost:<REDIS_PORT>/0
+#
+# To enable PostGIS on the database (one-time, per database), run once connected:
+#   CREATE EXTENSION IF NOT EXISTS postgis;
+# (the postgis/postgis image ships the extension binaries already; this just
+# activates it for a given database - normally done via an Alembic migration.)
+
+services:
+  postgres:
+    image: postgis/postgis:16-3.4
+    container_name: construction-intel-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-construction_intel}
+      POSTGRES_USER: ${POSTGRES_USER:-construction_intel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-changeme_local_only}
+    ports:
+      - "${POSTGRES_PORT:-5432}:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-construction_intel} -d ${POSTGRES_DB:-construction_intel}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  redis:
+    image: redis:7-alpine
+    container_name: construction-intel-redis
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    ports:
+      - "${REDIS_PORT:-6379}:6379"
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 5s
+
+volumes:
+  postgres_data:
+    name: construction-intel-postgres-data
+  redis_data:
+    name: construction-intel-redis-data

@@ -1,0 +1,24 @@
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+sqlalchemy>=2.0.36
+alembic>=1.14.0
+pydantic>=2.9.0
+pydantic-settings>=2.6.0
+httpx>=0.27.0
+python-multipart>=0.0.12
+celery>=5.4.0
+redis>=5.2.0
+python-dateutil>=2.9.0
+# NOTE: passlib is intentionally NOT used here -- passlib 1.7.4 (its last
+# release) is incompatible with bcrypt>=4.1 (removed `__about__` attribute,
+# breaks passlib's backend version detection). We call the `bcrypt` package
+# directly instead (see app/security.py), which is the commonly recommended
+# workaround since passlib is effectively unmaintained.
+bcrypt>=4.2.0
+pyjwt>=2.9.0
+stripe>=11.1.0
+beautifulsoup4>=4.12.0
+lxml>=5.3.0
+python-dotenv>=1.0.0
+pytest>=8.3.0
+pytest-mock>=3.14.0
